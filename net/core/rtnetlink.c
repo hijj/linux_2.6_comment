@@ -1558,7 +1558,7 @@ static int __net_init rtnetlink_net_init(struct net *net)
 				   rtnetlink_rcv, &rtnl_mutex, THIS_MODULE);
 	if (!sk)
 		return -ENOMEM;
-	net->rtnl = sk;
+	net->rtnl = sk; /* 网络命名空间专门为NETLINK_ROUTE协议预留的一个sock指针 */
 	return 0;
 }
 

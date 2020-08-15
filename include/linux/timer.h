@@ -11,12 +11,12 @@ struct tvec_base;
 
 struct timer_list {
 	struct list_head entry;
-	unsigned long expires;
+	unsigned long expires; /* 定时器到期时间，单位为jiffies */
 
 	void (*function)(unsigned long);
-	unsigned long data;
+	unsigned long data; /* 传递给回调函数的一个参数 */
 
-	struct tvec_base *base;
+	struct tvec_base *base; /* 指向一个基元素，其中的定时器按到期时间排序 */
 #ifdef CONFIG_TIMER_STATS
 	void *start_site;
 	char start_comm[16];

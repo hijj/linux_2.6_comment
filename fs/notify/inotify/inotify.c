@@ -303,6 +303,8 @@ void inotify_inode_queue_event(struct inode *inode, u32 mask, u32 cookie,
 {
 	struct inotify_watch *watch, *next;
 
+	/* returns nonzero if there are watches on this inode and zero otherwise.  
+	 * We call this lockless, we do not care if we race */
 	if (!inotify_inode_watched(inode))
 		return;
 

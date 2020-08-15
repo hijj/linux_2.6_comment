@@ -211,6 +211,12 @@ static inline int atomic64_add_unless(atomic64_t *v, long a, long u)
 	for (;;) {
 		if (unlikely(c == (u)))
 			break;
+		/**
+		 * atomic_read和atomic_cmpxchg之间可能v值改变
+		 * 如果v==c,v=c+a,返回c ==> 说明中间没有改变v值
+		 * 如果中间改值了,old为新v值 c=v重新赋值，同时判定是否为u
+		 * 如果为u不改变，循环操作直到中间没有改变v值
+		 */
 		old = atomic64_cmpxchg((v), c, c + (a));
 		if (likely(old == c))
 			break;

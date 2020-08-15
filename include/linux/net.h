@@ -128,22 +128,23 @@ enum sock_shutdown_cmd {
  *  @wait: wait queue for several uses
  */
 struct socket {
-	socket_state		state;
+	/* socket的当前状态 FREE,UNCONNECTED,CONNECTED, CONNECTING, DISCONNECTING */
+	socket_state		state; 
 
 	kmemcheck_bitfield_begin(type);
-	short			type;
+	short			type; /* 在特定协议族下的类型，如SOCK_STREAM */
 	kmemcheck_bitfield_end(type);
 
-	unsigned long		flags;
+	unsigned long		flags; /* 设置socket是否正在忙碌 ASYNC_NOSPACE,ASYNC_WAITDATA,NOSPACE */
 	/*
 	 * Please keep fasync_list & wait fields in the same cache line
 	 */
-	struct fasync_struct	*fasync_list;
-	wait_queue_head_t	wait;
+	struct fasync_struct	*fasync_list; /* 异步唤醒队列 */
+	wait_queue_head_t	wait; /* 等待队列，在TCP需要等待时，sleep就在这个队列上 */
 
-	struct file		*file;
-	struct sock		*sk;
-	const struct proto_ops	*ops;
+	struct file		*file; /* 回指指针 */
+	struct sock		*sk; /* sock指针 */
+	const struct proto_ops	*ops; /* 依据协议绑定到该socket上的特定协议族的操作函数指针 */
 };
 
 struct vm_area_struct;

@@ -148,6 +148,7 @@ static struct fdtable * alloc_fdtable(unsigned int nr)
 	 * grows far faster than any of the other dynamic data. We try to fit
 	 * the fdarray into comfortable page-tuned chunks: starting at 1024B
 	 * and growing in powers of two from there on.
+	 * 以1024为单位分配，2幂次方个1024B
 	 */
 	nr /= (1024 / sizeof(struct file *));
 	nr = roundup_pow_of_two(nr + 1);
@@ -277,7 +278,7 @@ static int count_open_files(struct fdtable *fdt)
 	int size = fdt->max_fds;
 	int i;
 
-	/* Find the last open fd */
+	/* Find the last open fd 一个long能存储 8*sizeof(long)位 */
 	for (i = size/(8*sizeof(long)); i > 0; ) {
 		if (fdt->open_fds->fds_bits[--i])
 			break;
@@ -350,6 +351,7 @@ struct files_struct *dup_fd(struct files_struct *oldf, int *errorp)
 		 * Reacquire the oldf lock and a pointer to its fd table
 		 * who knows it may have a new bigger fd table. We need
 		 * the latest pointer.
+		 * 因为在申请new_fdt时释放了锁，现在可能老大fd更大了
 		 */
 		spin_lock(&oldf->file_lock);
 		old_fdt = files_fdtable(oldf);

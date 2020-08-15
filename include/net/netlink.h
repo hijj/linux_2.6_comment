@@ -180,7 +180,7 @@ enum {
 #define NLA_TYPE_MAX (__NLA_TYPE_MAX - 1)
 
 /**
- * struct nla_policy - attribute validation policy
+ * struct nla_policy - attribute validation policy 属性验证策略
  * @type: Type of attribute or NLA_UNSPEC
  * @len: Type specific length of payload
  *

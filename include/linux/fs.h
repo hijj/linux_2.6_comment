@@ -924,7 +924,7 @@ struct file {
 #define f_vfsmnt	f_path.mnt
 	const struct file_operations	*f_op;
 	spinlock_t		f_lock;  /* f_ep_links, f_flags, no IRQ */
-	atomic_long_t		f_count;
+	atomic_long_t		f_count; /* 文件引用计数，当等于0就释放 */
 	unsigned int 		f_flags;
 	fmode_t			f_mode;
 	loff_t			f_pos;

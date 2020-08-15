@@ -306,12 +306,21 @@ typedef unsigned char *sk_buff_data_t;
 
 struct sk_buff {
 	/* These two members must be first. */
+	/* 用来连接相关的skb（如果有分片，将这些分片连接在一起） */
 	struct sk_buff		*next;
 	struct sk_buff		*prev;
 
+	/* 报文到达或者离开的时间戳 
+	 * time we arrived 表示这个skb接收到的时间，一般在包从驱动往二层发送的接口函数中设置*/
 	ktime_t			tstamp;
 
+	/* 指向报文所属的套接字指针，主要被4层用到，这是一个用于这个sk_buff的sock结构指针
+	 * 这个指针在网络包由本机发出或由本机进程接收时有效，因为插口相关系统被4层调用或用户空间程序得到
+	 * 如果sk_buff只在转发中使用（意味着源地址和目的地址都不是本地地址），这个指针为NULL */
 	struct sock		*sk;
+
+	/* 表示一个接收或者发送报文的网络设备，当sk_buff为输出时，表示将要输出的设备，
+	 * 当接收时，表示输入设备（可能为虚拟设备L3以上） */
 	struct net_device	*dev;
 
 	/*
@@ -320,16 +329,16 @@ struct sk_buff {
 	 * want to keep them across layers you have to do a skb_clone()
 	 * first. This is owned by whoever has the skb queued ATM.
 	 */
-	char			cb[48] __aligned(8);
+	char			cb[48] __aligned(8); /* 保存每一层的控制信息以及私有信息 */
 
-	unsigned long		_skb_dst;
+	unsigned long		_skb_dst; /* 主要用于路由子系统，保存一些路由相关信息 */
 #ifdef CONFIG_XFRM
-	struct	sec_path	*sp;
+	struct	sec_path	*sp; /* 安全路径，用于xfrm */
 #endif
-	unsigned int		len,
-				data_len;
-	__u16			mac_len,
-				hdr_len;
+	unsigned int		len, /* 当前协议数据包的长度，包括主缓存区中数据长度和分片中数据长度 */
+				data_len; /* 分片中数据长度，和len不同，data_len只计算分片中数据的长度 */
+	__u16			mac_len, /* mac头的长度 */
+				hdr_len; /* 用于clone时，表示clone的skb的头长度 */
 	union {
 		__wsum		csum;
 		struct {
@@ -337,20 +346,20 @@ struct sk_buff {
 			__u16	csum_offset;
 		};
 	};
-	__u32			priority;
+	__u32			priority; /* 优先级，主要用于QOS */
 	kmemcheck_bitfield_begin(flags1);
-	__u8			local_df:1,
-				cloned:1,
-				ip_summed:2,
-				nohdr:1,
+	__u8			local_df:1, /* 是否可以本地切片 */
+				cloned:1, /* 1表示可能被clone，保存当前的skb_buff时克隆还是原始的 */
+				ip_summed:2, /* 校验相关的一个标记，表示硬件驱动是否为我们进行过校验 */
+				nohdr:1, /* 1表示这个skb的头域指针已经分配完毕，这是计算头长度只需head和data差 */
 				nfctinfo:3;
-	__u8			pkt_type:3,
+	__u8			pkt_type:3, /* 数据包的类型，如单播，多播，回环等 */
 				fclone:2,
 				ipvs_property:1,
 				peeked:1,
 				nf_trace:1;
 	kmemcheck_bitfield_end(flags1);
-	__be16			protocol;
+	__be16			protocol; /* 表示L3层协议，比如ip，ipv6等 */
 
 	void			(*destructor)(struct sk_buff *skb);
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
@@ -370,7 +379,7 @@ struct sk_buff {
 #endif
 
 	kmemcheck_bitfield_begin(flags2);
-	__u16			queue_mapping:16;
+	__u16			queue_mapping:16; /* 多队列设备的映射 */
 #ifdef CONFIG_IPV6_NDISC_NODETYPE
 	__u8			ndisc_nodetype:2;
 #endif
@@ -385,22 +394,22 @@ struct sk_buff {
 	__u32			secmark;
 #endif
 	union {
-		__u32		mark;
+		__u32		mark; /* skb标记 */
 		__u32		dropcount;
 	};
 
-	__u16			vlan_tci;
+	__u16			vlan_tci; /* vlan标记控制信息 */
 
-	sk_buff_data_t		transport_header;
-	sk_buff_data_t		network_header;
-	sk_buff_data_t		mac_header;
+	sk_buff_data_t		transport_header; /* 传输层头 */
+	sk_buff_data_t		network_header; /* 网络层头指针 */
+	sk_buff_data_t		mac_header; /* 链路层头 */
 	/* These elements must be at the end, see alloc_skb() for details.  */
-	sk_buff_data_t		tail;
-	sk_buff_data_t		end;
-	unsigned char		*head,
-				*data;
-	unsigned int		truesize;
-	atomic_t		users;
+	sk_buff_data_t		tail; /* 保存数据被容的结尾 */
+	sk_buff_data_t		end; /* 分配的内存块的结尾 */
+	unsigned char		*head, /* 分配的内存块的起始位置，指向数据区中开始位置（非实际数据前开始位置） */
+				*data; /* 保存数据内容的首地址 */
+	unsigned int		truesize; /* 该缓冲区分配的所有总的内存，包括skb_buff+所有数据大小 */
+	atomic_t		users; /* 保存引用skb_buff的数量 */
 };
 
 #ifdef __KERNEL__

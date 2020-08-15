@@ -238,11 +238,11 @@ struct ucred {
    Added those for 1003.1g not all are supported yet
  */
  
-#define MSG_OOB		1
-#define MSG_PEEK	2
-#define MSG_DONTROUTE	4
+#define MSG_OOB		1 /* Process out-of-band data */
+#define MSG_PEEK	2 /* Peer at incoming messages */
+#define MSG_DONTROUTE	4 /* Don't use local routing */
 #define MSG_TRYHARD     4       /* Synonym for MSG_DONTROUTE for DECnet */
-#define MSG_CTRUNC	8
+#define MSG_CTRUNC	8 /* Control data lost before delivery */
 #define MSG_PROBE	0x10	/* Do not send. Only probe path f.e. for MTU */
 #define MSG_TRUNC	0x20
 #define MSG_DONTWAIT	0x40	/* Nonblocking io		 */
@@ -262,7 +262,7 @@ struct ucred {
 #define MSG_CMSG_CLOEXEC 0x40000000	/* Set close_on_exit for file
 					   descriptor received through
 					   SCM_RIGHTS */
-#if defined(CONFIG_COMPAT)
+#if defined(CONFIG_COMPAT) /* 64位内核支持32位应用 */
 #define MSG_CMSG_COMPAT	0x80000000	/* This message needs 32 bit fixups */
 #else
 #define MSG_CMSG_COMPAT	0		/* We never have 32 bit fixups */

@@ -86,6 +86,11 @@ static int wait_for_packet(struct sock *sk, int *err, long *timeo_p)
 	int error;
 	DEFINE_WAIT_FUNC(wait, receiver_wake_function);
 
+	/* 将进程状态设置为中断状态，如果没有消息到达或者接收信号，会已知睡眠
+	 * (超时时间timeo可设，一般默认为MAX_SCHEDULE_TIMEOUT，然后调用schedule)
+	 * 在schedule_timeout函数上，在内核netlink发送流程的最后数据送到接收队列后会
+	 * 唤醒等待队列， 进程唤醒后返回_skb_recv_datagram大循环中去接收消息，
+	 * 若是被信号打断， 大循环中无法获取消息， 会到这运行信号退出动作*/
 	prepare_to_wait_exclusive(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
 
 	/* Socket errors? */
@@ -170,6 +175,7 @@ struct sk_buff *__skb_recv_datagram(struct sock *sk, unsigned flags,
 	if (error)
 		goto no_packet;
 
+	/* 获取等待时长，初始化时设置成MAX_SCHEDULE_TIMEOUT,可通过set_socketopt改动 */
 	timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
 
 	do {
@@ -183,6 +189,10 @@ struct sk_buff *__skb_recv_datagram(struct sock *sk, unsigned flags,
 
 		spin_lock_irqsave(&sk->sk_receive_queue.lock, cpu_flags);
 		skb = skb_peek(&sk->sk_receive_queue);
+
+		/* 如果当前接收队列中已经有数据，则从队列中取一个skb包，如果设置了MSG_PEER(表明获取该skb包不从接收队列中删除)
+		 * 如果设置了则调用skb_set_peeked函数skb_clone出一个skb消息返回，否则直接调用__skb_unlink将本次取出的skb包
+		 * 从列表中删除 */
 		if (skb) {
 			*peeked = skb->peeked;
 			if (flags & MSG_PEEK) {

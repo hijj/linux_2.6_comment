@@ -1146,6 +1146,7 @@ static void yield_task_fair(struct rq *rq)
 
 #ifdef CONFIG_SMP
 
+/* 对睡眠进程的已运行虚拟时间进行补偿 */
 static void task_waking_fair(struct rq *rq, struct task_struct *p)
 {
 	struct sched_entity *se = &p->se;

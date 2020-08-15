@@ -356,13 +356,13 @@ static inline struct task_group *task_group(struct task_struct *p)
 
 /* CFS-related fields in a runqueue */
 struct cfs_rq {
-	struct load_weight load;
-	unsigned long nr_running;
+	struct load_weight load; /* CFS运行队列的负载权重值 */
+	unsigned long nr_running; /* 运行的调度实体数(参与时间片计算) */
 
-	u64 exec_clock;
-	u64 min_vruntime;
+	u64 exec_clock; /* 运行时间 */
+	u64 min_vruntime; /* 最少的虚拟运行时间，调度实体入队出队时需要增减处理 */
 
-	struct rb_root tasks_timeline;
+	struct rb_root tasks_timeline; /* 红黑树，用于存放调度实体 */
 	struct rb_node *rb_leftmost;
 
 	struct list_head tasks;
@@ -371,12 +371,15 @@ struct cfs_rq {
 	/*
 	 * 'curr' points to currently running entity on this cfs_rq.
 	 * It is set to NULL otherwise (i.e when none are currently running).
+	 * 分别指向当前的调度实体，下一个调度的调度实体
+	 * CFS运行队列中欧排最后的调度实体、跳过运行的调度实体
 	 */
 	struct sched_entity *curr, *next, *last;
 
 	unsigned int nr_spread_over;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
+	/* 指向CFS运行队列所属的  CPU RQ运行队列 */
 	struct rq *rq;	/* cpu runqueue to which this cfs_rq is attached */
 
 	/*
@@ -388,6 +391,7 @@ struct cfs_rq {
 	 * list is used during load balance.
 	 */
 	struct list_head leaf_cfs_rq_list;
+	/* CFS运行队列所属的任务组 */
 	struct task_group *tg;	/* group that "owns" this runqueue */
 
 #ifdef CONFIG_SMP
@@ -499,18 +503,20 @@ struct rq {
 	 * nr_running and cpu_load should be in the same cacheline because
 	 * remote CPUs use both these fields when doing load calculation.
 	 */
-	unsigned long nr_running;
+	unsigned long nr_running; /* 指定队列上可运行进程的数目，不考虑优先级或调度类 */
 	#define CPU_LOAD_IDX_MAX 5
-	unsigned long cpu_load[CPU_LOAD_IDX_MAX];
+	unsigned long cpu_load[CPU_LOAD_IDX_MAX]; /* 用于跟踪此前的负荷状态 */
 #ifdef CONFIG_NO_HZ
 	unsigned char in_nohz_recently;
 #endif
-	/* capture load from *all* tasks on this cpu: */
+	/* capture load from *all* tasks on this cpu: 
+	 * 提供了就绪队列当前负荷的度量，队列的负荷本质上与队列上当前进程的数目成正比，
+	 * 其中的各个进程又有优先级作为权重，每个就绪队列的虚拟时钟的速度基于该信息 */
 	struct load_weight load;
 	unsigned long nr_load_updates;
 	u64 nr_switches;
 
-	struct cfs_rq cfs;
+	struct cfs_rq cfs; /* 嵌入的就绪队列，分别用于完全公平调度器和实时调度器 */
 	struct rt_rq rt;
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
@@ -529,11 +535,11 @@ struct rq {
 	 */
 	unsigned long nr_uninterruptible;
 
-	struct task_struct *curr, *idle;
+	struct task_struct *curr, *idle; /* idle指向idle进程实例，在无其他可运行进程时运行 */
 	unsigned long next_balance;
 	struct mm_struct *prev_mm;
 
-	u64 clock;
+	u64 clock; /* 用于实现就绪队列自身的时钟，每次调用周期性调度器时，都会更新clock的值 */
 
 	atomic_t nr_iowait;
 
@@ -1819,6 +1825,7 @@ static int get_update_sysctl_factor(void);
 
 static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 {
+	/* 修改task的cfs_rq和parent，如果迁移到其他CPU */
 	set_task_rq(p, cpu);
 #ifdef CONFIG_SMP
 	/*
@@ -1827,6 +1834,7 @@ static inline void __set_task_cpu(struct task_struct *p, unsigned int cpu)
 	 * per-task data have been completed by this moment.
 	 */
 	smp_wmb();
+	/* 优先将进程放到进程所在的cpu上运行 */
 	task_thread_info(p)->cpu = cpu;
 #endif
 }
@@ -1887,6 +1895,7 @@ enqueue_task(struct rq *rq, struct task_struct *p, int wakeup, bool head)
 	p->se.on_rq = 1;
 }
 
+/* 从运行队列的链表中删除一个进程描述符 */
 static void dequeue_task(struct rq *rq, struct task_struct *p, int sleep)
 {
 	if (sleep) {
@@ -2364,6 +2373,8 @@ int select_task_rq(struct task_struct *p, int sd_flags, int wake_flags)
  * runnable without the overhead of this.
  *
  * returns failure only if the task is already active.
+ * 通过把进程状态置为TASK_RUNNING，并把该进程插入本地CPU的运行队列来唤醒睡眠或停止的进程
+ * wake_flag 标记用来禁止被唤醒的进程抢占本地CPU上正在运行的进程
  */
 static int try_to_wake_up(struct task_struct *p, unsigned int state,
 			  int wake_flags)
@@ -2378,11 +2389,17 @@ static int try_to_wake_up(struct task_struct *p, unsigned int state,
 	this_cpu = get_cpu();
 
 	smp_wmb();
+	/* 调用task_rq_lock来禁止中断，并获得进程所在CPU上的运行队列的锁
+	 * 可能与当前CPU运行队列不一样，并且被唤醒的进程可能不在队列上 */
 	rq = task_rq_lock(p, &flags);
 	update_rq_clock(rq);
+
+	/* 只唤醒state对应状态的进程，如果被唤醒的进程状态不在state中，直接退出，本次唤醒无效 
+	 * 例如：通过信号不会唤醒TASK_UNINTERRUPTIBLE状态的进程 */
 	if (!(p->state & state))
 		goto out;
 
+	/* 如果进程已经属于某个运行队列中，就跳到out_running，将它的状态修改为TASK_RUNNING状态后退出 */
 	if (p->se.on_rq)
 		goto out_running;
 
@@ -2398,6 +2415,7 @@ static int try_to_wake_up(struct task_struct *p, unsigned int state,
 	 * we put the task in TASK_WAKING state.
 	 *
 	 * First fix up the nr_uninterruptible count:
+	 * 为了防止并发唤醒和释放rq->lock锁，把task状态设置成TASK_WAKING，首先将不可中断计数修改
 	 */
 	if (task_contributes_to_load(p))
 		rq->nr_uninterruptible--;
@@ -3697,19 +3715,28 @@ pick_next_task(struct rq *rq)
  */
 asmlinkage void __sched schedule(void)
 {
+	/* next指向被选中的进程，这个进程将取代当前进程在CPU上运行
+	 * 如果系统中没有优先级高于当前进程，那么next会和current相等，不发生任何切换 */
 	struct task_struct *prev, *next;
 	unsigned long *switch_count;
 	struct rq *rq;
 	int cpu;
 
 need_resched:
+	/* 先禁止抢占，在初始化一些变量
+     * 此处需要禁止抢占，因为后面需要访问任务运行队列，禁止抢占后可以防止进程飘移     @wangjia  */
 	preempt_disable();
 	cpu = smp_processor_id();
 	rq = cpu_rq(cpu);
+	/* rcu cpu切换   @wangjia  */
 	rcu_sched_qs(cpu);
 	prev = rq->curr;
 	switch_count = &prev->nivcsw;
 
+	/* 释放大内核锁：
+	 * 当内核抢占打开时，并且当前中断正在抢占当前进程，会将lock_depth置为-1，这样不会释放内核锁
+	 * 只有当进程获得了大内核锁并且是主动调度时，才会释放锁
+	 * 释放锁并不会修改lock_depth,当进程恢复执行时，如果lock_depth >= 0，就会再次获得大内核锁 */
 	release_kernel_lock(prev);
 need_resched_nonpreemptible:
 
@@ -3722,10 +3749,12 @@ need_resched_nonpreemptible:
 	update_rq_clock(rq);
 	clear_tsk_need_resched(prev);
 
+	/* 如果进程不是TASK_RUNNING状态，并且没有被内核抢占，就把进程从运行队列中删除 */
 	if (prev->state && !(preempt_count() & PREEMPT_ACTIVE)) {
+		/* 如果进程是被信号打断的，就将它设置成TASK_RUNNING */
 		if (unlikely(signal_pending_state(prev->state, prev)))
 			prev->state = TASK_RUNNING;
-		else
+		else /* 将它从运行队列中删除 */
 			deactivate_task(rq, prev, 1);
 		switch_count = &prev->nvcsw;
 	}

@@ -46,25 +46,26 @@ enum tick_nohz_mode {
  * @do_timer_lst:	CPU was the last one doing do_timer before going idle
  */
 struct tick_sched {
-	struct hrtimer			sched_timer;
+	struct hrtimer			sched_timer; /* 用于时间时钟的定时器 */
 	unsigned long			check_clocks;
+	/* 当前运行模式，INACTIVE, LOWERS, HIGHRES  */
 	enum tick_nohz_mode		nohz_mode;
-	ktime_t				idle_tick;
+	ktime_t				idle_tick; /* 存储在禁用周期时钟之前，上一时钟信号的到期时间 */
 	int				inidle;
-	int				tick_stopped;
-	unsigned long			idle_jiffies;
-	unsigned long			idle_calls;
-	unsigned long			idle_sleeps;
+	int				tick_stopped; /* 如果周期时钟已经停用，为1，否则为0 */
+	unsigned long			idle_jiffies; /* 周期时钟禁用的jiffies值 */
+	unsigned long			idle_calls; /* 统计内核试图停用周期时钟的次数 */
+	unsigned long			idle_sleeps; /* 统计实际上成功停用周期时钟的次数 */
 	int				idle_active;
 	ktime_t				idle_entrytime;
 	ktime_t				idle_waketime;
 	ktime_t				idle_exittime;
-	ktime_t				idle_sleeptime;
+	ktime_t				idle_sleeptime; /* 存储周期时钟上一次禁用的准确时间（使用当前最佳分辨率） */
 	ktime_t				idle_lastupdate;
-	ktime_t				sleep_length;
-	unsigned long			last_jiffies;
-	unsigned long			next_jiffies;
-	ktime_t				idle_expires;
+	ktime_t				sleep_length; /* 存储周期时钟将禁用的时间长度 */
+	unsigned long			last_jiffies; /* 累计时钟停用的总时间 */
+	unsigned long			next_jiffies; /* 下一个定时器到期的jiffy值 */
+	ktime_t				idle_expires; /* 下一个将到期的经典定时器的到期时间，分辨率尽可能高，单位不是jiffies */
 	int				do_timer_last;
 };
 

@@ -67,18 +67,19 @@
 struct netlink_sock {
 	/* struct sock has to be the first member of netlink_sock */
 	struct sock		sk;
-	u32			pid;
-	u32			dst_pid;
+	u32			pid; /* 本套接字自己绑定的id号，内核为0 */
+	u32			dst_pid; /* 目的id号 */
 	u32			dst_group;
 	u32			flags;
-	u32			subscriptions;
-	u32			ngroups;
-	unsigned long		*groups;
+	u32			subscriptions;/* 加入的组播组数目  */
+	u32			ngroups;  /* 协议支持多播组数量 */
+	unsigned long		*groups; /* 保存组位掩码 */
 	unsigned long		state;
-	wait_queue_head_t	wait;
+	wait_queue_head_t	wait; 
 	struct netlink_callback	*cb;
 	struct mutex		*cb_mutex;
 	struct mutex		cb_def_mutex;
+	/* 接收到用户态数据后的处理函数 */
 	void			(*netlink_rcv)(struct sk_buff *skb);
 	struct module		*module;
 };
@@ -117,11 +118,11 @@ struct nl_pid_hash {
 };
 
 struct netlink_table {
-	struct nl_pid_hash hash;
-	struct hlist_head mc_list;
-	unsigned long *listeners;
+	struct nl_pid_hash hash; /* 索引同种协议类型的不同netlink套接字实例 */
+	struct hlist_head mc_list; /* 多播使用的sock散列表 */
+	unsigned long *listeners; /* 监听者掩码 */
 	unsigned int nl_nonroot;
-	unsigned int groups;
+	unsigned int groups; /* 协议支持的最大多播组数量 */
 	struct mutex *cb_mutex;
 	struct module *module;
 	int registered;
@@ -332,6 +333,7 @@ netlink_update_listeners(struct sock *sk)
 	unsigned long mask;
 	unsigned int i;
 
+	/* 更新netlink监听位掩码 */
 	for (i = 0; i < NLGRPLONGS(tbl->groups); i++) {
 		mask = 0;
 		sk_for_each_bound(sk, node, &tbl->mc_list) {
@@ -376,6 +378,8 @@ static int netlink_insert(struct sock *sk, struct net *net, u32 pid)
 		head = nl_pid_hashfn(hash, pid);
 	hash->entries++;
 	nlk_sk(sk)->pid = pid;
+
+	/* 将套接字插入到nl_table数组项的hash表中 */
 	sk_add_node(sk, head);
 	err = 0;
 
@@ -436,8 +440,10 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 	struct netlink_sock *nlk;
 	int err = 0;
 
+	/* 将socket状态标记为未连接 */
 	sock->state = SS_UNCONNECTED;
 
+	/* 如果套接字不是SOCK_RAM或者SOCK_DGRAM类型，不创建 */
 	if (sock->type != SOCK_RAW && sock->type != SOCK_DGRAM)
 		return -ESOCKTNOSUPPORT;
 
@@ -463,11 +469,13 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 	if (err < 0)
 		goto out;
 
+	/* 分配并初始化sock结构 */
 	err = __netlink_create(net, sock, cb_mutex, protocol);
 	if (err < 0)
 		goto out_module;
 
 	local_bh_disable();
+	/* 添加协议引用计数 */
 	sock_prot_inuse_add(net, &netlink_proto, 1);
 	local_bh_enable();
 
@@ -553,6 +561,8 @@ retry:
 	cond_resched();
 	netlink_table_grab();
 	head = nl_pid_hashfn(hash, pid);
+
+	/* 尝试将进程id作为端口地址，如果已经绑定其他相同protocol套接字，选用一个负数作为ID */
 	sk_for_each(osk, node, head) {
 		if (!net_eq(sock_net(osk), net))
 			continue;
@@ -592,8 +602,8 @@ netlink_update_subscriptions(struct sock *sk, unsigned int subscriptions)
 	if (nlk->subscriptions && !subscriptions)
 		__sk_del_bind_node(sk);
 	else if (!nlk->subscriptions && subscriptions)
-		sk_add_bind_node(sk, &nl_table[sk->sk_protocol].mc_list);
-	nlk->subscriptions = subscriptions;
+		sk_add_bind_node(sk, &nl_table[sk->sk_protocol].mc_list); /* 绑定sk_bind_node到nl_table中 */
+	nlk->subscriptions = subscriptions; /* 加入的组播组数目 */
 }
 
 static int netlink_realloc_groups(struct sock *sk)
@@ -611,6 +621,7 @@ static int netlink_realloc_groups(struct sock *sk)
 		goto out_unlock;
 	}
 
+	/* 如果当前套接字指定的组播地址上限大于最大值 */
 	if (nlk->ngroups >= groups)
 		goto out_unlock;
 
@@ -641,7 +652,7 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 	if (nladdr->nl_family != AF_NETLINK)
 		return -EINVAL;
 
-	/* Only superuser is allowed to listen multicasts */
+	/* Only superuser is allowed to listen multicasts 只有超级用户运行监听多播 */
 	if (nladdr->nl_groups) {
 		if (!netlink_capable(sock, NL_NONROOT_RECV))
 			return -EPERM;
@@ -651,6 +662,7 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 	}
 
 	if (nlk->pid) {
+		/* 如果已经绑定过，检查是否等于已经绑定过的id号 */
 		if (nladdr->nl_pid != nlk->pid)
 			return -EINVAL;
 	} else {
@@ -835,6 +847,8 @@ int netlink_sendskb(struct sock *sk, struct sk_buff *skb)
 	int len = skb->len;
 
 	skb_queue_tail(&sk->sk_receive_queue, skb);
+
+	/* 唤醒目的接收端socket的等待队列，这样应用层套接字就可以接收并处理消息了 */
 	sk->sk_data_ready(sk, len);
 	sock_put(sk);
 	return len;
@@ -890,6 +904,7 @@ static inline int netlink_unicast_kernel(struct sock *sk, struct sk_buff *skb)
 	if (nlk->netlink_rcv != NULL) {
 		ret = skb->len;
 		skb_set_owner_r(skb, sk);
+		/* 将消息送到内核中的目的netlink套接字中 */
 		nlk->netlink_rcv(skb);
 	}
 	kfree_skb(skb);
@@ -904,18 +919,24 @@ int netlink_unicast(struct sock *ssk, struct sk_buff *skb,
 	int err;
 	long timeo;
 
+	/* 重新裁剪skb数据区的大小，可能会clone出一个新的skb结构同时分配skb->data的内存空间
+	 * 如果原本skb中多余的内存数据区非常小就不会执行上述操作 */
 	skb = netlink_trim(skb, gfp_any());
 
 	timeo = sock_sndtimeo(ssk, nonblock);
 retry:
+	/* 根据目的portid号和原端sock结构查找目的端口的sock结构 */
 	sk = netlink_getsockbypid(ssk, pid);
 	if (IS_ERR(sk)) {
 		kfree_skb(skb);
 		return PTR_ERR(sk);
 	}
+
+	/* 目的地址是内核空间，则调用netlink_unicast_kernel向内核进行单播，入参是目的sock，数据skb，源端sock */
 	if (netlink_is_kernel(sk))
 		return netlink_unicast_kernel(sk, skb);
 
+	/* 执行防火墙的过滤，确保可以发送以后调用netlink_attachskb将要发送的skb绑定到netlink sock上 */
 	if (sk_filter(sk, skb)) {
 		err = skb->len;
 		kfree_skb(skb);
@@ -923,6 +944,10 @@ retry:
 		return err;
 	}
 
+	/* 目的sock接收缓冲区剩余的缓存大小小于已经提交的数据量，或者标志位置位于NETLINK_CONGESTED阻塞标志
+	 * 表明数据不可以立即发送到目的端的接收缓存中，因此，在源端不是内核socket且没有非阻塞标志的情况下会定义
+	 * 一个等待队列并等待指定的时间并返回1，否则丢地该skb数据包并返回失败
+	 * 若目的端的接收缓冲区空间足够，就会调用netlink_skb_set_ower_r进行绑定 */
 	err = netlink_attachskb(sk, skb, &timeo, ssk);
 	if (err == 1)
 		goto retry;
@@ -989,6 +1014,7 @@ static inline int do_one_broadcast(struct sock *sk,
 	if (p->exclude_sk == sk)
 		goto out;
 
+	/* 这里会确保源sock和目的sock不是同一个,它们属于同一网络命名空间，目的组播地址为发送的目的组播地址 */
 	if (nlk->pid == p->pid || p->group - 1 >= nlk->ngroups ||
 	    !test_bit(p->group - 1, nlk->groups))
 		goto out;
@@ -1024,6 +1050,7 @@ static inline int do_one_broadcast(struct sock *sk,
 		kfree_skb(p->skb2);
 		p->skb2 = NULL;
 	} else if ((val = netlink_broadcast_deliver(sk, p->skb2)) < 0) {
+		/* 对目的sock发送数据skb */
 		netlink_overrun(sk);
 		if (nlk->flags & NETLINK_BROADCAST_SEND_ERROR)
 			p->delivery_failure = 1;
@@ -1064,6 +1091,9 @@ int netlink_broadcast(struct sock *ssk, struct sk_buff *skb, u32 pid,
 
 	netlink_lock_table();
 
+	/* 初始化netlink组播数据结构netlink_broadcast_data，其中info.group保存了目的组播地址
+	 * 然后从nl_table[ssk->sk_protocol].mclist里找加入组播组的socket，并调用do_one_broadcast函数
+	 * 一次发送组播数据 */
 	sk_for_each_bound(sk, node, &nl_table[ssk->sk_protocol].mc_list)
 		do_one_broadcast(sk, &info);
 
@@ -1316,15 +1346,15 @@ static int netlink_sendmsg(struct kiocb *kiocb, struct socket *sock,
 		if (addr->nl_family != AF_NETLINK)
 			return -EINVAL;
 		dst_pid = addr->nl_pid;
-		dst_group = ffs(addr->nl_groups);
+		dst_group = ffs(addr->nl_groups); /* 查找一个整数中的第一个置位值(即bit为1的位) */
 		if (dst_group && !netlink_capable(sock, NL_NONROOT_SEND))
 			return -EPERM;
-	} else {
+	} else { /* 没有指定netlink，消息接收地址使用默认的 */
 		dst_pid = nlk->dst_pid;
 		dst_group = nlk->dst_group;
 	}
 
-	if (!nlk->pid) {
+	if (!nlk->pid) { /* 判断当前netlink套接字是否绑定过，如果没有绑定过调用netlink_autobind进行动态绑定 */
 		err = netlink_autobind(sock);
 		if (err)
 			goto out;
@@ -1338,6 +1368,7 @@ static int netlink_sendmsg(struct kiocb *kiocb, struct socket *sock,
 	if (skb == NULL)
 		goto out;
 
+	/* 在成功创建skb结构后，初始化它 */
 	NETLINK_CB(skb).pid	= nlk->pid;
 	NETLINK_CB(skb).dst_group = dst_group;
 	NETLINK_CB(skb).loginuid = audit_get_loginuid(current);
@@ -1350,7 +1381,7 @@ static int netlink_sendmsg(struct kiocb *kiocb, struct socket *sock,
 	   check them, when this message will be delivered
 	   to corresponding kernel module.   --ANK (980802)
 	 */
-
+	/* 第一次内存拷贝动作，将用户空间数据拷贝到内核skb中 */
 	err = -EFAULT;
 	if (memcpy_fromiovec(skb_put(skb, len), msg->msg_iov, len)) {
 		kfree_skb(skb);
@@ -1391,6 +1422,7 @@ static int netlink_recvmsg(struct kiocb *kiocb, struct socket *sock,
 
 	copied = 0;
 
+	/* 从接收socket的缓存中接收消息并通过skb返回，如果设置了MSG_DONWAIT则在接收队列没消息时马上返回，否则阻塞等待 */
 	skb = skb_recv_datagram(sk, flags, noblock, &err);
 	if (skb == NULL)
 		goto out;
@@ -1426,6 +1458,8 @@ static int netlink_recvmsg(struct kiocb *kiocb, struct socket *sock,
 
 	msg->msg_namelen = 0;
 
+	/* 更新最长的接收数据长度，然后推断假设获取到的skb数据长度大于本次接收缓存的最大长度
+	 * 设置MSG_TRUNC标志，并将需要接收数据量设置为接收缓存的长度 */
 	copied = skb->len;
 	if (len < copied) {
 		msg->msg_flags |= MSG_TRUNC;
@@ -1433,17 +1467,21 @@ static int netlink_recvmsg(struct kiocb *kiocb, struct socket *sock,
 	}
 
 	skb_reset_transport_header(skb);
+	/* 将skb中的实际数据复制到msg消息中 */
 	err = skb_copy_datagram_iovec(skb, 0, msg->msg_iov, copied);
 
+	/* 初始化地址结构 */
 	if (msg->msg_name) {
 		struct sockaddr_nl *addr = (struct sockaddr_nl *)msg->msg_name;
 		addr->nl_family = AF_NETLINK;
 		addr->nl_pad    = 0;
 		addr->nl_pid	= NETLINK_CB(skb).pid;
+		/* 在内核调用nlmsg_multicast发送组播时设置 */
 		addr->nl_groups	= netlink_group_mask(NETLINK_CB(skb).dst_group);
 		msg->msg_namelen = sizeof(*addr);
 	}
 
+	/* 如果设置了PKTINFO标记，将辅助消息头复制到用户空间 */
 	if (nlk->flags & NETLINK_RECV_PKTINFO)
 		netlink_cmsg_recv_pktinfo(msg, skb);
 
@@ -1452,6 +1490,9 @@ static int netlink_recvmsg(struct kiocb *kiocb, struct socket *sock,
 		siocb->scm = &scm;
 	}
 	siocb->scm->creds = *NETLINK_CREDS(skb);
+
+	/* 如果设置了，在设置一次copied,设置本次为取出的skb中获取数据的长度
+	 * 疑问： 为什么不置标记不需要，差别在哪里 @wangjia */
 	if (flags & MSG_TRUNC)
 		copied = skb->len;
 
@@ -1496,6 +1537,7 @@ netlink_kernel_create(struct net *net, int unit, unsigned int groups,
 	if (unit < 0 || unit >= MAX_LINKS)
 		return NULL;
 
+	/* 分配并初始化socket结构 */
 	if (sock_create_lite(PF_NETLINK, SOCK_DGRAM, unit, &sock))
 		return NULL;
 
@@ -1505,10 +1547,12 @@ netlink_kernel_create(struct net *net, int unit, unsigned int groups,
 	 * So we create one inside init_net and the move it to net.
 	 */
 
+	/* 分配并初始化sock结构，创建时使用的时init_net网络命名空间 */
 	if (__netlink_create(&init_net, sock, cb_mutex, unit) < 0)
 		goto out_sock_release_nosk;
 
 	sk = sock->sk;
+	/* 将网络命名空间转移到当前的net命名空间 */
 	sk_change_net(sk, net);
 
 	if (groups < 32)
@@ -1523,6 +1567,7 @@ netlink_kernel_create(struct net *net, int unit, unsigned int groups,
 	if (input)
 		nlk_sk(sk)->netlink_rcv = input;
 
+	/* 添加hash表 */
 	if (netlink_insert(sk, net, 0))
 		goto out_sock_release;
 
@@ -1530,6 +1575,8 @@ netlink_kernel_create(struct net *net, int unit, unsigned int groups,
 	nlk->flags |= NETLINK_KERNEL_SOCKET;
 
 	netlink_table_grab();
+
+	/* 初始化nl_table表项 */
 	if (!nl_table[unit].registered) {
 		nl_table[unit].groups = groups;
 		nl_table[unit].listeners = listeners;
@@ -2141,7 +2188,10 @@ static int __init netlink_proto_init(void)
 		hash->rehash_time = jiffies;
 	}
 
+	/* 将netlink的sock创建处理函数注册到内核，以后应用层创建netlink类型的socket灰调用该协议处理函数 */
 	sock_register(&netlink_family_ops);
+
+	/* 向内核所有的网络命名空间注册“子系统”的初始化和去初始化函数 */
 	register_pernet_subsys(&netlink_net_ops);
 	/* The netlink device handler may be needed early. */
 	rtnetlink_init();

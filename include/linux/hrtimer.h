@@ -101,8 +101,8 @@ enum hrtimer_restart {
  * The hrtimer structure must be initialized by hrtimer_init()
  */
 struct hrtimer {
-	struct rb_node			node;
-	ktime_t				_expires;
+	struct rb_node			node; /* 将定时器维持在上述红黑树中 */
+	ktime_t				_expires; /* 指向定时器的基础 */
 	ktime_t				_softexpires;
 	enum hrtimer_restart		(*function)(struct hrtimer *);
 	struct hrtimer_clock_base	*base;
@@ -139,14 +139,18 @@ struct hrtimer_sleeper {
  * @offset:		offset of this clock to the monotonic base
  */
 struct hrtimer_clock_base {
-	struct hrtimer_cpu_base	*cpu_base;
-	clockid_t		index;
-	struct rb_root		active;
-	struct rb_node		*first;
-	ktime_t			resolution;
-	ktime_t			(*get_time)(void);
-	ktime_t			softirq_time;
+	struct hrtimer_cpu_base	*cpu_base; /* 该时钟基础所属的各CPU时钟基础结构 */
+	clockid_t		index; /* 用于区分CLOCK_MONOTONIC和CLOCK_REALTIME */
+	struct rb_root		active; /* 红黑树的根节点，所有活动的定时器都在该树中 */
+	struct rb_node		*first; /* 第一个到期的定时器 */
+	ktime_t			resolution; /* 该定时器的分辨率，单位为纳秒 */
+	ktime_t			(*get_time)(void); /* 获取细粒度时间 */
+	ktime_t			softirq_time; /* 存储软中断发出的时间，而get_softirg_time可用于获取该时间 */
 #ifdef CONFIG_HIGH_RES_TIMERS
+	/* 在实际调整时钟时，会造成存储在CLOCK_REALTIME时钟基础上的定时器的过期
+	 * 时间值与当前实际时间之间的偏差，offset有助于修正这种情况，表示定时器
+	 * 需要校正的偏移量
+	 */
 	ktime_t			offset;
 #endif
 };
@@ -172,10 +176,10 @@ struct hrtimer_cpu_base {
 	raw_spinlock_t			lock;
 	struct hrtimer_clock_base	clock_base[HRTIMER_MAX_CLOCK_BASES];
 #ifdef CONFIG_HIGH_RES_TIMERS
-	ktime_t				expires_next;
-	int				hres_active;
+	ktime_t				expires_next; /* 将要到期的下一个事件的绝对时间 */
+	int				hres_active; /* bool变量，表示高分辨率模式是否已经启用，还是只提供低分辨率模式 */
 	int				hang_detected;
-	unsigned long			nr_events;
+	unsigned long			nr_events; /* 跟踪记录时钟中断的总数 */
 	unsigned long			nr_retries;
 	unsigned long			nr_hangs;
 	ktime_t				max_hang_time;

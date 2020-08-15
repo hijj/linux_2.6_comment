@@ -128,8 +128,8 @@ struct sock_common {
 	 * first fields are not copied in sock_copy()
 	 */
 	union {
-		struct hlist_node	skc_node;
-		struct hlist_nulls_node skc_nulls_node;
+		struct hlist_node	skc_node; /* 多协议hash表结点 */
+		struct hlist_nulls_node skc_nulls_node; /* TCP/UDP/轻量级UDP协议hash表 */
 	};
 	atomic_t		skc_refcnt;
 	int			skc_tx_queue_mapping;
@@ -141,7 +141,7 @@ struct sock_common {
 	unsigned short		skc_family;
 	volatile unsigned char	skc_state;
 	unsigned char		skc_reuse;
-	int			skc_bound_dev_if;
+	int			skc_bound_dev_if; /* 绑定的设备索引 */
 	union {
 		struct hlist_node	skc_bind_node;
 		struct hlist_nulls_node skc_portaddr_node;
@@ -238,67 +238,73 @@ struct sock {
 #define sk_prot			__sk_common.skc_prot
 #define sk_net			__sk_common.skc_net
 	kmemcheck_bitfield_begin(flags);
+	 /* 判断该socket连接在某方向或双向都已经关闭SHUTDOWN_MASK, RCV_SHUTDOWN, SEND_SHUTDOWN */
 	unsigned int		sk_shutdown  : 2,
+	/* 是否对发出的skb做校验和，仅对UDP有效 */
 				sk_no_check  : 2,
+	/* 改变收包等操作的执行顺序SNDBUF_LOCK, RCVBUF_LOCK, BINDADDR_LOCK, BINDPORT_LOCK */
 				sk_userlocks : 4,
+	/* socket(family, type, protocol)中的protocol */
 				sk_protocol  : 8,
+	/* SOCK_STREAM, SOCK_DGRAM或SOCK_RAM等 */
 				sk_type      : 16;
 	kmemcheck_bitfield_end(flags);
-	int			sk_rcvbuf;
-	socket_lock_t		sk_lock;
+	int			sk_rcvbuf; /* 接收缓冲区的大小（按字节） */
+	socket_lock_t		sk_lock; /* 用户上下文和软中断处理时提供同步机制 */
 	/*
 	 * The backlog queue is special, it is always used with
 	 * the per-socket spinlock held and requires low latency
 	 * access. Therefore we special case it's implementation.
 	 */
-	struct {
+	struct { /* 当sock被锁定时，收到的数据包放在这里 */
 		struct sk_buff *head;
 		struct sk_buff *tail;
 		int len;
 		int limit;
 	} sk_backlog;
-	wait_queue_head_t	*sk_sleep;
-	struct dst_entry	*sk_dst_cache;
+	wait_queue_head_t	*sk_sleep; /* 所属线程的自身休眠等待队列 */
+	struct dst_entry	*sk_dst_cache; /* 目的地的路由缓存 */
 #ifdef CONFIG_XFRM
 	struct xfrm_policy	*sk_policy[2];
 #endif
-	rwlock_t		sk_dst_lock;
-	atomic_t		sk_rmem_alloc;
-	atomic_t		sk_wmem_alloc;
-	atomic_t		sk_omem_alloc;
-	int			sk_sndbuf;
-	struct sk_buff_head	sk_receive_queue;
-	struct sk_buff_head	sk_write_queue;
+	rwlock_t		sk_dst_lock; /* 赋值sk_dst_cache时的锁 */
+	atomic_t		sk_rmem_alloc; /* 接收队列存放的数据的字节数 */
+	atomic_t		sk_wmem_alloc; /* 发送队列存放的数据的字节数 */
+	atomic_t		sk_omem_alloc; /* 在TCP分析中无需考虑, option or other */
+	int			sk_sndbuf; /* 发送缓冲区的大小(按字节) */
+	struct sk_buff_head	sk_receive_queue; /* 接收队列 */
+	struct sk_buff_head	sk_write_queue; /* 发送队列 */
 #ifdef CONFIG_NET_DMA
 	struct sk_buff_head	sk_async_wait_queue;
 #endif
-	int			sk_wmem_queued;
-	int			sk_forward_alloc;
-	gfp_t			sk_allocation;
-	int			sk_route_caps;
+	int			sk_wmem_queued; /* 所有已经发送的数据的总字节数 */
+	int			sk_forward_alloc; /* 预分配剩余字节数 */
+	gfp_t			sk_allocation; /* 分配该sock值skb时选择模式GFP_ATOMIC还是GFP_KERNEL */
+	int			sk_route_caps; /* 本sock用到的路由信息 */
 	int			sk_gso_type;
 	unsigned int		sk_gso_max_size;
+	/* 声明在开始发送数据(SO_SNDLOWAT)或正在接收数据的用户(SO_RCVLOWAT)传递数据之前缓存区的最小字节数，不可改变，固定为1 */
 	int			sk_rcvlowat;
 	unsigned long 		sk_flags;
-	unsigned long	        sk_lingertime;
-	struct sk_buff_head	sk_error_queue;
-	struct proto		*sk_prot_creator;
+	unsigned long	        sk_lingertime; /* 知名close后保留的时间 @wangjia */
+	struct sk_buff_head	sk_error_queue; 
+	struct proto		*sk_prot_creator; /* sock相关函数内部操作的保护锁 */
 	rwlock_t		sk_callback_lock;
-	int			sk_err,
-				sk_err_soft;
+	int			sk_err, /* 保护错误 */
+				sk_err_soft; /* 保护软件错误 */
 	atomic_t		sk_drops;
-	unsigned short		sk_ack_backlog;
-	unsigned short		sk_max_ack_backlog;
+	unsigned short		sk_ack_backlog; /* 当前已经accept的数目 */
+	unsigned short		sk_max_ack_backlog; /* 当前可accept的数目 */
 	__u32			sk_priority;
 	struct ucred		sk_peercred;
-	long			sk_rcvtimeo;
-	long			sk_sndtimeo;
+	long			sk_rcvtimeo; /* 接收时的超时设定，并在超时时报错 */
+	long			sk_sndtimeo; /* 发送时的超时设定，并在超时时报错 */
 	struct sk_filter      	*sk_filter;
 	void			*sk_protinfo;
 	struct timer_list	sk_timer;
 	ktime_t			sk_stamp;
 	struct socket		*sk_socket;
-	void			*sk_user_data;
+	void			*sk_user_data; /* 私有数据 */
 	struct page		*sk_sndmsg_page;
 	struct sk_buff		*sk_send_head;
 	__u32			sk_sndmsg_off;

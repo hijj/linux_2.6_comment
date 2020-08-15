@@ -76,14 +76,16 @@ enum clock_event_nofitiers {
  * @retries:		number of forced programming retries
  */
 struct clock_event_device {
-	const char		*name;
+	const char		*name; /* 该事件设备的名字，显示在/proc/timerlist中 */
 	unsigned int		features;
-	u64			max_delta_ns;
+	u64			max_delta_ns; /* 指定当前事件和下次事件的触发事件的差值 */
 	u64			min_delta_ns;
-	u32			mult;
+	u32			mult; /* 乘数和位移，用于时钟周期和纳秒值之间进行转换 */
 	u32			shift;
 	int			rating;
-	int			irq;
+	/* 指定该事件设备使用的IRQ编号，只有全局设备才需要该编号，
+	 * 具备使用不同硬件禁止发送信号，为1*/
+	int			irq; 
 	const struct cpumask	*cpumask;
 	int			(*set_next_event)(unsigned long evt,
 						  struct clock_event_device *);
@@ -93,7 +95,7 @@ struct clock_event_device {
 	void			(*broadcast)(const struct cpumask *mask);
 	struct list_head	list;
 	enum clock_event_mode	mode;
-	ktime_t			next_event;
+	ktime_t			next_event; /* 下一个事件的绝对时间 */
 	unsigned long		retries;
 };
 

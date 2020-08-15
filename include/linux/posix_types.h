@@ -34,6 +34,7 @@
 #define	__FDMASK(d)	(1UL << ((d) % __NFDBITS))
 
 typedef struct {
+	/* __FDSET_LONG表示 一个long有8*sizeof(unsigned long)位，1024只需要1024/__NFDBITS */
 	unsigned long fds_bits [__FDSET_LONGS];
 } __kernel_fd_set;
 

@@ -4,7 +4,7 @@
 #include <linux/socket.h> /* for sa_family_t */
 #include <linux/types.h>
 
-#define NETLINK_ROUTE		0	/* Routing/device hook				*/
+#define NETLINK_ROUTE		0	/* Routing/device hook 用于设置和查找路由表等网络核心模块  			*/
 #define NETLINK_UNUSED		1	/* Unused number				*/
 #define NETLINK_USERSOCK	2	/* Reserved for user mode socket protocols 	*/
 #define NETLINK_FIREWALL	3	/* Firewalling hook				*/
@@ -32,7 +32,11 @@ struct net;
 struct sockaddr_nl {
 	sa_family_t	nl_family;	/* AF_NETLINK	*/
 	unsigned short	nl_pad;		/* zero		*/
+	/* port ID 在发送消息时表示目的套接字id，在用户空间可以指定当前进程pid，内核为0
+	 * 同一进程多个netlink套接字时必须保证唯一，一般多线程中pthread_self()<<16|getpid() */
 	__u32		nl_pid;		/* port ID	*/
+	/* multicast group mask发送消息时用于表示目的多播组，在绑定地址时用于表示加入的多播组
+	 * 32无符号，每一位表示一个多播组，一个netlink套接字可以加入多个多播组用以接收多播组的多播消息（最多32个）*/
        	__u32		nl_groups;	/* multicast groups mask */
 };
 
@@ -133,8 +137,8 @@ struct nlattr {
  * +---+---+-------------------------------+
  * | N | O | Attribute Type                |
  * +---+---+-------------------------------+
- * N := Carries nested attributes
- * O := Payload stored in network byte order
+ * N := Carries nested attributes 携带嵌套属性
+ * O := Payload stored in network byte order 有效负载以网络序存储
  *
  * Note: The N and O flag are mutually exclusive.
  */

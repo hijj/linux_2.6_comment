@@ -302,12 +302,14 @@ struct file *fget_light(unsigned int fd, int *fput_needed)
 	struct files_struct *files = current->files;
 
 	*fput_needed = 0;
+	/* 如果fd没有共享，则不用增加引用计数 */
 	if (likely((atomic_read(&files->count) == 1))) {
 		file = fcheck_files(files, fd);
 	} else {
 		rcu_read_lock();
 		file = fcheck_files(files, fd);
 		if (file) {
+			/* 增加文件对象引用计数，在原子加1完成前为0，不添加引用计数 */
 			if (atomic_long_inc_not_zero(&file->f_count))
 				*fput_needed = 1;
 			else

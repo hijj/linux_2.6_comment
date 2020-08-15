@@ -231,6 +231,8 @@ static ssize_t inotify_read(struct file *file, char __user *buf,
 {
 	struct fsnotify_group *group;
 	struct fsnotify_event *kevent;
+	/* __user表明参数是一个用户空间的指针，不能再kernel代码中直接访问，
+	 * 也方便其他工具对代码检查 */
 	char __user *start;
 	int ret;
 	DEFINE_WAIT(wait);

@@ -411,6 +411,7 @@ static void tasklet_action(struct softirq_action *a)
 
 		list = list->next;
 
+		/* 判断是否置上了RUN标记，相同类型的tasklet只能有一个执行 */
 		if (tasklet_trylock(t)) {
 			if (!atomic_read(&t->count)) {
 				if (!test_and_clear_bit(TASKLET_STATE_SCHED, &t->state))
@@ -435,6 +436,7 @@ static void tasklet_hi_action(struct softirq_action *a)
 {
 	struct tasklet_struct *list;
 
+	/* 不需要保存flag，因为处于软中断，中断总是被激活的 */
 	local_irq_disable();
 	list = __get_cpu_var(tasklet_hi_vec).head;
 	__get_cpu_var(tasklet_hi_vec).head = NULL;
@@ -459,6 +461,7 @@ static void tasklet_hi_action(struct softirq_action *a)
 
 		local_irq_disable();
 		t->next = NULL;
+		/* 当第一次赋值时，将t同时赋值给了.head */
 		*__get_cpu_var(tasklet_hi_vec).tail = t;
 		__get_cpu_var(tasklet_hi_vec).tail = &(t->next);
 		__raise_softirq_irqoff(HI_SOFTIRQ);

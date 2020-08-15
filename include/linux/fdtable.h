@@ -44,7 +44,7 @@ struct files_struct {
   /*
    * read mostly part
    */
-	atomic_t count;
+	atomic_t count; /* 共享该文件的进程数 */
 	struct fdtable *fdt;
 	struct fdtable fdtab;
   /*

@@ -161,8 +161,16 @@ struct clocksource {
 	/*
 	 * First part of structure is read mostly
 	 */
-	char *name;
+	char *name; /* 时钟源给出了一个人类可读的名字 */
 	struct list_head list;
+	/**
+	 * 指定时钟质量
+	 * 1到99之间，表示质量非常差的时钟源，只能在万不得已或用于启动期间
+	 * 			  没有更好时钟源情况下使用
+	 * 100到199之间，表示时钟源可用于实际应用，但由更好时钟源时，一般不用
+	 * 300到399之间，表示时钟源相当快速且准确
+	 * 400到499之间，完美的时钟源
+	 */
 	int rating;
 	cycle_t (*read)(struct clocksource *cs);
 	int (*enable)(struct clocksource *cs);

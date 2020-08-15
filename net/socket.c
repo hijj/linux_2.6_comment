@@ -1168,6 +1168,7 @@ call_kill:
 	return 0;
 }
 
+/* kern为0，表示从应用层创建的套接字 */
 static int __sock_create(struct net *net, int family, int type, int protocol,
 			 struct socket **res, int kern)
 {
@@ -1223,6 +1224,8 @@ static int __sock_create(struct net *net, int family, int type, int protocol,
 	 * 12/09/1996 Marcin: But! this makes REALLY only sense, if the user
 	 * requested real, full-featured networking support upon configuration.
 	 * Otherwise module support will break!
+	 * 在启用内核模块的情况下，到内核net_families数组中查找该family(AF_NETLINK)是否已经注册
+	 * 如果没有注册就会加载网络子系统模块
 	 */
 	if (net_families[family] == NULL)
 		request_module("net-pf-%d", family);
@@ -1237,6 +1240,7 @@ static int __sock_create(struct net *net, int family, int type, int protocol,
 	/*
 	 * We will call the ->create function, that possibly is in a loadable
 	 * module, so we have to bump that loadable module refcnt first.
+	 * 可能是可加载模块，先加模块引用计数
 	 */
 	if (!try_module_get(pf->owner))
 		goto out_release;
@@ -1244,6 +1248,7 @@ static int __sock_create(struct net *net, int family, int type, int protocol,
 	/* Now protected by module ref count */
 	rcu_read_unlock();
 
+	/* 如netlink在netlink_family_ops中定义 */
 	err = pf->create(net, sock, protocol, kern);
 	if (err < 0)
 		goto out_module_put;
@@ -2038,6 +2043,8 @@ static int __sys_recvmsg(struct socket *sock, struct msghdr __user *msg,
 		if (err < 0)
 			goto out_freeiov;
 	}
+
+	/* 将flag，消息辅助数据等拷贝到用户空间 */
 	err = __put_user((msg_sys->msg_flags & ~MSG_CMSG_COMPAT),
 			 COMPAT_FLAGS(msg));
 	if (err)

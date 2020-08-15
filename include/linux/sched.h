@@ -1088,23 +1088,23 @@ struct load_weight {
  *     6 se->load.weight
  */
 struct sched_entity {
-	struct load_weight	load;		/* for load-balancing */
-	struct rb_node		run_node;
-	struct list_head	group_node;
-	unsigned int		on_rq;
+	struct load_weight	load;		/* for load-balancing 调度实体的负载权重值 */
+	struct rb_node		run_node; /* 用于连接CFS运行队列的红黑树的结点 */
+	struct list_head	group_node; /* 用于连接CFS运行队列的cfs_tasks链表中的结点 */
+	unsigned int		on_rq; /* 用于表示是否在运行队列中 */
 
-	u64			exec_start;
-	u64			sum_exec_runtime;
-	u64			vruntime;
-	u64			prev_sum_exec_runtime;
+	u64			exec_start; /* 当前调度实体的开始执行时间 */
+	u64			sum_exec_runtime; /* 调度实体执行的总时间 */
+	u64			vruntime; /* 进程的虚拟运行时间，该运行时间是经过所有可运行进程总数的标准化（加权） */
+	u64			prev_sum_exec_runtime; /* 上一个运行实体运行的总时间 */
 
-	u64			last_wakeup;
+	u64			last_wakeup; /* 截止上次唤醒运行的总时间 */
 	u64			avg_overlap;
 
-	u64			nr_migrations;
+	u64			nr_migrations; /* 负载均衡 */
 
-	u64			start_runtime;
-	u64			avg_wakeup;
+	u64			start_runtime; /* 加入就绪队列时已经运行的时间 */
+	u64			avg_wakeup; /* 度量一个任务唤醒其他任务频繁度，表示唤醒的平均时间，如果不唤醒其他，有avg_runtime限制 */
 
 #ifdef CONFIG_SCHEDSTATS
 	u64			wait_start;
@@ -1141,11 +1141,11 @@ struct sched_entity {
 #endif
 
 #ifdef CONFIG_FAIR_GROUP_SCHED
-	struct sched_entity	*parent;
+	struct sched_entity	*parent; /* 指向调度实体的父对象 */
 	/* rq on which this entity is (to be) queued: */
-	struct cfs_rq		*cfs_rq;
+	struct cfs_rq		*cfs_rq; /* 指向调度实体归属的CFS队列，也就是需要入列的CFS队列 */
 	/* rq "owned" by this entity/group: */
-	struct cfs_rq		*my_q;
+	struct cfs_rq		*my_q; /* 指向归属于当前调度实体的CFS队列，用于包含子任务和子的任务组 */
 #endif
 };
 
