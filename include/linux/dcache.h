@@ -88,18 +88,18 @@ full_name_hash(const unsigned char *name, unsigned int len)
 
 struct dentry {
 	atomic_t d_count;
-	unsigned int d_flags;		/* protected by d_lock */
+	unsigned int d_flags;		/* protected by d_lock 目录块高速缓存标记 */
 	spinlock_t d_lock;		/* per dentry lock */
 	int d_mounted;
-	struct inode *d_inode;		/* Where the name belongs to - NULL is
+	struct inode *d_inode;		/* 目录inode结点 Where the name belongs to - NULL is
 					 * negative */
 	/*
 	 * The next three fields are touched by __d_lookup.  Place them here
 	 * so they all fit in a cache line.
 	 */
 	struct hlist_node d_hash;	/* lookup hash list */
-	struct dentry *d_parent;	/* parent directory */
-	struct qstr d_name;
+	struct dentry *d_parent;	/* parent directory 指向父目录的dentry */
+	struct qstr d_name; /* 目录名 */
 
 	struct list_head d_lru;		/* LRU list */
 	/*
@@ -112,7 +112,7 @@ struct dentry {
 	struct list_head d_subdirs;	/* our children */
 	struct list_head d_alias;	/* inode alias list */
 	unsigned long d_time;		/* used by d_revalidate */
-	const struct dentry_operations *d_op;
+	const struct dentry_operations *d_op; /* 与dentry相关的操作函数 */
 	struct super_block *d_sb;	/* The root of the dentry tree */
 	void *d_fsdata;			/* fs-specific data */
 

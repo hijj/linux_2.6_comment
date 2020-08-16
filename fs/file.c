@@ -205,6 +205,8 @@ static int expand_fdtable(struct files_struct *files, int nr)
 {
 	struct fdtable *new_fdt, *cur_fdt;
 
+	/* 在这里释放锁，是因为申请fdtable耗时 
+	 * 自旋锁一直轮询，如果申请资源睡眠，其他尝试获取该锁的任务一直等待 */
 	spin_unlock(&files->file_lock);
 	new_fdt = alloc_fdtable(nr);
 	spin_lock(&files->file_lock);
@@ -223,12 +225,15 @@ static int expand_fdtable(struct files_struct *files, int nr)
 	/*
 	 * Check again since another task may have expanded the fd table while
 	 * we dropped the lock
+	 * 在检查一遍，因为可能我们在释放锁时，其他任务可能扩展了这个fd table
 	 */
 	cur_fdt = files_fdtable(files);
 	if (nr >= cur_fdt->max_fds) {
 		/* Continue as planned */
 		copy_fdtable(new_fdt, cur_fdt);
 		rcu_assign_pointer(files->fdt, new_fdt);
+
+		/* 疑问：如果小于不释放           @wangjia  */
 		if (cur_fdt->max_fds > NR_OPEN_DEFAULT)
 			free_fdtable(cur_fdt);
 	} else {
@@ -245,7 +250,8 @@ static int expand_fdtable(struct files_struct *files, int nr)
  * This function will expand the file structures, if the requested size exceeds
  * the current capacity and there is room for expansion.
  * Return <0 error code on error; 0 when nothing done; 1 when files were
- * expanded and execution may have blocked.
+ * expanded and execution may have blocked. 
+ * blocked意思应该是申请资源时释放了自旋锁，其他任务可能占有，然后申请了expand fdtable
  * The files->file_lock should be held on entry, and will be held on exit.
  */
 int expand_files(struct files_struct *files, int nr)
@@ -442,6 +448,8 @@ struct files_struct init_files = {
  */
 int alloc_fd(unsigned start, unsigned flags)
 {
+	/* 每个进程维护一个struct files_struct结构，
+	 * 用户管理当前进程所有打开文件的信息 */
 	struct files_struct *files = current->files;
 	unsigned int fd;
 	int error;
@@ -453,11 +461,11 @@ repeat:
 	fd = start;
 	if (fd < files->next_fd)
 		fd = files->next_fd;
-
+	/* 如果fd <  max_fds，找下一个0bit位，可能返回max_fds */
 	if (fd < fdt->max_fds)
 		fd = find_next_zero_bit(fdt->open_fds->fds_bits,
 					   fdt->max_fds, fd);
-
+	/* 扩展files支持的fd数 */
 	error = expand_files(files, fd);
 	if (error < 0)
 		goto out;
@@ -465,10 +473,14 @@ repeat:
 	/*
 	 * If we needed to expand the fs array we
 	 * might have blocked - try again.
+	 * 返回1可能是扩展fs array阻塞，重新尝试一次, 什么情况下 block @wangjia
+	 * block应该是申请资源expand fdtable时释放了lock，然后其他任务占有锁，申请expand了,
+	 * 需要重新计算fd
 	 */
 	if (error)
 		goto repeat;
 
+	/* 如果满足，则是从next_fd找的fd,下一个可用肯定大于fd 疑问：next_fd只会递增  @wangjia */
 	if (start <= files->next_fd)
 		files->next_fd = fd + 1;
 
@@ -479,7 +491,7 @@ repeat:
 		FD_CLR(fd, fdt->close_on_exec);
 	error = fd;
 #if 1
-	/* Sanity check */
+	/* Sanity check 完整性检查，正常不应该为非NULL */
 	if (rcu_dereference_raw(fdt->fd[fd]) != NULL) {
 		printk(KERN_WARNING "alloc_fd: slot %d not NULL!\n", fd);
 		rcu_assign_pointer(fdt->fd[fd], NULL);

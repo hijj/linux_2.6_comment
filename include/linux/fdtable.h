@@ -29,10 +29,15 @@ struct embedded_fd_set {
 };
 
 struct fdtable {
-	unsigned int max_fds;
-	struct file ** fd;      /* current fd array */
-	fd_set *close_on_exec;
-	fd_set *open_fds;
+	unsigned int max_fds; /* 当前进程支持的最大文件描述符数 */
+	/* current fd array 指向当前进程所有打开文件的文件结构指针数组 
+	 * 每个打开的文件都会使用一个struct file进行管理，并将这个struct file加入当前
+	 * 进程的fd_array[]数组中，fd指向struct files_struct的fd_array[]数组 */
+	struct file ** fd;      
+	/* bitmap，每个对应一个文件描述符，每个bit代表一个打开的文件描述符，
+	 * 用于确定在调用系统调用execve时需要关闭的文件句柄 */
+	fd_set *close_on_exec; 
+	fd_set *open_fds; /* max_fds决定bit位数 */
 	struct rcu_head rcu;
 	struct fdtable *next;
 };
@@ -51,7 +56,7 @@ struct files_struct {
    * written part on a separate cache line in SMP
    */
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
-	int next_fd;
+	int next_fd; /* 当前进程下一个可用的文件描述符 */
 	struct embedded_fd_set close_on_exec_init;
 	struct embedded_fd_set open_fds_init;
 	struct file * fd_array[NR_OPEN_DEFAULT];

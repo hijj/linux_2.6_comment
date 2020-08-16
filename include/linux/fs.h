@@ -726,11 +726,11 @@ struct inode {
 	struct list_head	i_list;		/* backing dev IO list */
 	struct list_head	i_sb_list;
 	struct list_head	i_dentry;
-	unsigned long		i_ino;
+	unsigned long		i_ino; /* 索引节点号 */
 	atomic_t		i_count;
 	unsigned int		i_nlink;
-	uid_t			i_uid;
-	gid_t			i_gid;
+	uid_t			i_uid; /* 所有者标识 */
+	gid_t			i_gid; /* 组标识 */
 	dev_t			i_rdev;
 	unsigned int		i_blkbits;
 	u64			i_version;
@@ -738,12 +738,12 @@ struct inode {
 #ifdef __NEED_I_SIZE_ORDERED
 	seqcount_t		i_size_seqcount;
 #endif
-	struct timespec		i_atime;
+	struct timespec		i_atime; /* 文件相关时间 访问、修改、创建 */
 	struct timespec		i_mtime;
 	struct timespec		i_ctime;
 	blkcnt_t		i_blocks;
 	unsigned short          i_bytes;
-	umode_t			i_mode;
+	umode_t			i_mode; /* 文件类型与访问权限 */
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	struct mutex		i_mutex;
 	struct rw_semaphore	i_alloc_sem;
@@ -1317,20 +1317,20 @@ extern spinlock_t sb_lock;
 #define sb_entry(list)  list_entry((list), struct super_block, s_list)
 #define S_BIAS (1<<30)
 struct super_block {
-	struct list_head	s_list;		/* Keep this first */
+	struct list_head	s_list;		/* Keep this first 超级块链表指针 */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
 	unsigned char		s_dirt;
-	unsigned char		s_blocksize_bits;
-	unsigned long		s_blocksize;
-	loff_t			s_maxbytes;	/* Max file size */
-	struct file_system_type	*s_type;
-	const struct super_operations	*s_op;
+	unsigned char		s_blocksize_bits; /* 块大小所占用的bit数 */
+	unsigned long		s_blocksize; /* 块大小（字节为单位） */
+	loff_t			s_maxbytes;	/* Max file size 最大文件大小 */
+	struct file_system_type	*s_type; /* 文件系统类型 */
+	const struct super_operations	*s_op; /* 超级块操作 */
 	const struct dquot_operations	*dq_op;
 	const struct quotactl_ops	*s_qcop;
 	const struct export_operations *s_export_op;
 	unsigned long		s_flags;
 	unsigned long		s_magic;
-	struct dentry		*s_root;
+	struct dentry		*s_root; /* 文件系统根目录对应的dentry */
 	struct rw_semaphore	s_umount;
 	struct mutex		s_lock;
 	int			s_count;

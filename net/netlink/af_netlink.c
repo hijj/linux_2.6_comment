@@ -2188,7 +2188,7 @@ static int __init netlink_proto_init(void)
 		hash->rehash_time = jiffies;
 	}
 
-	/* 将netlink的sock创建处理函数注册到内核，以后应用层创建netlink类型的socket灰调用该协议处理函数 */
+	/* 将netlink的sock创建处理函数注册到内核，以后应用层创建netlink类型的socket会调用该协议处理函数 */
 	sock_register(&netlink_family_ops);
 
 	/* 向内核所有的网络命名空间注册“子系统”的初始化和去初始化函数 */

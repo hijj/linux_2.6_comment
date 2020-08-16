@@ -1328,7 +1328,9 @@ struct task_struct {
 	struct thread_struct thread;
 /* filesystem information */
 	struct fs_struct *fs;
-/* open file information */
+	/* open file information 
+	/* 每个进程维护一个struct files_struct结构，
+	 * 用户管理当前进程所有打开文件的信息 */
 	struct files_struct *files;
 /* namespaces */
 	struct nsproxy *nsproxy;

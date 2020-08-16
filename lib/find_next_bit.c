@@ -71,35 +71,48 @@ unsigned long find_next_zero_bit(const unsigned long *addr, unsigned long size,
 	unsigned long result = offset & ~(BITS_PER_LONG-1);
 	unsigned long tmp;
 
+	/* 偏移量大于最大值，返回最大值 */
 	if (offset >= size)
 		return size;
+	/* size表示剩下还有多少位 */
 	size -= result;
+	/* 当前long   bit位内还有多少位   */
 	offset %= BITS_PER_LONG;
 	if (offset) {
 		tmp = *(p++);
+		/* 获取p中 高(BITS_PER_LONG)-offset位，低offset位设为全1 ，用来判断是否为全1 */
 		tmp |= ~0UL >> (BITS_PER_LONG - offset);
+		/* 最后一个long */
 		if (size < BITS_PER_LONG)
 			goto found_first;
+		/* 判断是否为全1，不是全1则found_middle */
 		if (~tmp)
 			goto found_middle;
 		size -= BITS_PER_LONG;
 		result += BITS_PER_LONG;
 	}
+
+	/* 如果size大于BITS_PER_LONG位 */
 	while (size & ~(BITS_PER_LONG-1)) {
+		/* 循环每个long，如果存在非全1，found_middle */
 		if (~(tmp = *(p++)))
 			goto found_middle;
 		result += BITS_PER_LONG;
 		size -= BITS_PER_LONG;
 	}
+
+	/* 如果size==0,  则result表示原参数size */
 	if (!size)
 		return result;
 	tmp = *p;
 
 found_first:
 	tmp |= ~0UL << size;
+	/* 剩余size位tmp中全为1 */
 	if (tmp == ~0UL)	/* Are any bits zero? */
-		return result + size;	/* Nope. */
+		return result + size;	/* Nope. 返回原始size值，类似上面if(!size) return result */
 found_middle:
+	/* ffz查找第一个0bit位，必须确保tmp不是全1 */
 	return result + ffz(tmp);
 }
 EXPORT_SYMBOL(find_next_zero_bit);

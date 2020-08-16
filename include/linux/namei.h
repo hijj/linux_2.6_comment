@@ -16,12 +16,12 @@ struct open_intent {
 enum { MAX_NESTED_LINKS = 8 };
 
 struct nameidata {
-	struct path	path;
-	struct qstr	last;
-	struct path	root;
-	unsigned int	flags;
-	int		last_type;
-	unsigned	depth;
+	struct path	path; /* 记录路径查找的结果 */
+	struct qstr	last; /* 路径名最后一个分量 */
+	struct path	root; /* 路径查找的根目录信息，可能会在查找开始时由调用者传入 */
+	unsigned int	flags; /* 路径名查找标志 */
+	int		last_type; /* 记录当前查找到的目录的类别Normal/Dot/DotDot/Root/Bind */
+	unsigned	depth; /* 查找过程中跨越的符号链接深度 */
 	char *saved_names[MAX_NESTED_LINKS + 1];
 
 	/* Intent data */
@@ -37,12 +37,12 @@ enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
 
 /*
  * The bitmask for a lookup event:
- *  - follow links at the end
- *  - require a directory
- *  - ending slashes ok even for nonexistent files
+ *  - follow links at the end 
+ *  - require a directory 要求是目录
+ *  - ending slashes ok even for nonexistent files 即使文件不存在也可以斜杠结尾
  *  - internal "there are more path components" flag
- *  - locked when lookup done with dcache_lock held
- *  - dentry cache is untrusted; force a real lookup
+ *  - locked when lookup done with dcache_lock held 查找时使用dcache_lock锁定
+ *  - dentry cache is untrusted; force a real lookup dentry cache不可信，强制真正查找
  */
 #define LOOKUP_FOLLOW		 1
 #define LOOKUP_DIRECTORY	 2

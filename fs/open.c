@@ -1043,6 +1043,7 @@ EXPORT_SYMBOL(fd_install);
 
 long do_sys_open(int dfd, const char __user *filename, int flags, int mode)
 {
+	/* 将用户空间的filename拷贝到内核空间 */
 	char *tmp = getname(filename);
 	int fd = PTR_ERR(tmp);
 
@@ -1081,6 +1082,9 @@ SYSCALL_DEFINE4(openat, int, dfd, const char __user *, filename, int, flags,
 {
 	long ret;
 
+	/* 判断是否需要设置大文件标志,只有在32位OS上此处为false，64位系统上flag为自动加上O_LARGFILE
+	 * 文件最大大小受索引结点中表示文件大小的32位的i_size影响，只能访问2^32字节，高位一般不用，通常只有2G,
+	 * 加上O_LAGEFILE之后启用索引结点的i_dir_acl字段一起表示文件大小，2^64位，单个文件就可达到16T */
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
 
